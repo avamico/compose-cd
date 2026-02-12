@@ -1,0 +1,338 @@
+# =============================================================================
+# {{ project_name }} Deployments - Justfile
+# =============================================================================
+# Install just: https://github.com/casey/just
+#   brew install just
+# =============================================================================
+
+# Default: list available commands
+default:
+    @just --list
+{% if use_terraform %}
+
+# =============================================================================
+# TERRAFORM
+# =============================================================================
+
+# Initialize Terraform for an environment
+{% raw %}
+tf-init env:
+    cd terraform/environments/{{ env }} && \
+    export $(cat .env 2>/dev/null | grep -v '^#' | xargs) && \
+    terraform init
+
+# Plan Terraform changes
+tf-plan env:
+    cd terraform/environments/{{ env }} && \
+    export $(cat .env 2>/dev/null | grep -v '^#' | xargs) && \
+    terraform plan
+
+# Apply Terraform changes
+tf-apply env:
+    cd terraform/environments/{{ env }} && \
+    export $(cat .env 2>/dev/null | grep -v '^#' | xargs) && \
+    terraform apply
+
+# Apply Terraform changes (auto-approve)
+tf-apply-auto env:
+    cd terraform/environments/{{ env }} && \
+    export $(cat .env 2>/dev/null | grep -v '^#' | xargs) && \
+    terraform apply -auto-approve
+
+# Destroy Terraform resources
+tf-destroy env:
+    cd terraform/environments/{{ env }} && \
+    export $(cat .env 2>/dev/null | grep -v '^#' | xargs) && \
+    terraform destroy
+
+# Show Terraform outputs
+tf-output env:
+    cd terraform/environments/{{ env }} && \
+    export $(cat .env 2>/dev/null | grep -v '^#' | xargs) && \
+    terraform output
+
+# Format Terraform files
+tf-fmt:
+    terraform fmt -recursive terraform/
+
+# Validate Terraform configuration
+tf-validate env:
+    cd terraform/environments/{{ env }} && \
+    export $(cat .env 2>/dev/null | grep -v '^#' | xargs) && \
+    terraform validate
+{% endraw %}
+{% endif %}
+
+# =============================================================================
+# LOCAL DEVELOPMENT
+# =============================================================================
+
+{% raw %}
+# Start ops + app locally
+up env="local":
+    cd deploy && \
+    docker compose \
+        -f docker-compose.ops.yml \
+        -f ops/overlays/base/docker-compose.yml \
+        -f ops/overlays/{{ env }}/docker-compose.yml \
+        -f docker-compose.app.yml \
+        -f app/overlays/base/docker-compose.yml \
+        -f app/overlays/{{ env }}/docker-compose.yml \
+        -f docker-compose.local.yml \
+        up -d
+
+# Start specific services only
+up-svc +services:
+    cd deploy && \
+    docker compose \
+        -f docker-compose.ops.yml \
+        -f ops/overlays/base/docker-compose.yml \
+        -f ops/overlays/local/docker-compose.yml \
+        -f docker-compose.app.yml \
+        -f app/overlays/base/docker-compose.yml \
+        -f app/overlays/local/docker-compose.yml \
+        -f docker-compose.local.yml \
+        up -d {{ services }}
+{% endraw %}
+
+# Start all services (+ reverse proxy, promtail, watchtower, vault-agent)
+{% raw %}
+up-all env="local" proxy="caddy":
+    cd deploy && \
+    docker compose \
+        -f docker-compose.ops.yml \
+        -f ops/overlays/base/docker-compose.yml \
+        -f ops/overlays/{{ env }}/docker-compose.yml \
+        -f docker-compose.app.yml \
+        -f app/overlays/base/docker-compose.yml \
+        -f app/overlays/{{ env }}/docker-compose.yml \
+        -f docker-compose.local.yml \
+        --profile {{ proxy }}{% endraw %}{% if promtail %} --profile promtail{% endif %}{% if watchtower %} --profile watchtower{% endif %}{% if vault_agent %} --profile vault-agent{% endif %}{% raw %} \
+        up -d
+
+# Stop all services
+down env="local":
+    cd deploy && \
+    docker compose \
+        -f docker-compose.ops.yml \
+        -f ops/overlays/base/docker-compose.yml \
+        -f ops/overlays/{{ env }}/docker-compose.yml \
+        -f docker-compose.app.yml \
+        -f app/overlays/base/docker-compose.yml \
+        -f app/overlays/{{ env }}/docker-compose.yml \
+        -f docker-compose.local.yml \
+        --profile caddy{% endraw %}{% if promtail %} --profile promtail{% endif %}{% if watchtower %} --profile watchtower{% endif %}{% if vault_agent %} --profile vault-agent{% endif %}{% raw %} \
+        down
+
+# Stop specific services
+down-svc +services:
+    docker stop {{ services }}
+
+# Stop all services and remove volumes
+down-v env="local":
+    cd deploy && \
+    docker compose \
+        -f docker-compose.ops.yml \
+        -f ops/overlays/base/docker-compose.yml \
+        -f ops/overlays/{{ env }}/docker-compose.yml \
+        -f docker-compose.app.yml \
+        -f app/overlays/base/docker-compose.yml \
+        -f app/overlays/{{ env }}/docker-compose.yml \
+        -f docker-compose.local.yml \
+        --profile caddy{% endraw %}{% if promtail %} --profile promtail{% endif %}{% if watchtower %} --profile watchtower{% endif %}{% if vault_agent %} --profile vault-agent{% endif %}{% raw %} \
+        down -v
+
+# View logs (all or specific services)
+logs *services:
+    cd deploy && \
+    docker compose \
+        -f docker-compose.ops.yml \
+        -f ops/overlays/base/docker-compose.yml \
+        -f ops/overlays/local/docker-compose.yml \
+        -f docker-compose.local.yml \
+        logs -f {{ services }}
+
+# Restart a service
+restart service:
+    cd deploy && \
+    docker compose \
+        -f docker-compose.ops.yml \
+        -f ops/overlays/base/docker-compose.yml \
+        -f ops/overlays/local/docker-compose.yml \
+        -f docker-compose.local.yml \
+        restart {{ service }}
+
+# Show running containers
+ps:
+    docker ps --format "table {{{{.ID}}\t{{{{.Names}}\t{{{{.Status}}\t{{{{.Ports}}"
+
+# Show CPU and memory usage for all containers
+stats:
+    docker stats --no-stream --format "table {{{{.ID}}\t{{{{.Name}}\t{{{{.CPUPerc}}\t{{{{.MemUsage}}\t{{{{.MemPerc}}"
+{% endraw %}
+{% if vault %}
+
+# =============================================================================
+# VAULT
+# =============================================================================
+
+# Initialize Vault (first time)
+vault-init:
+    docker exec -it vault vault operator init
+
+# Unseal Vault (run 3 times with different keys)
+vault-unseal:
+    @echo "Enter unseal key:"
+    @docker exec -it vault vault operator unseal
+
+# Vault status
+vault-status:
+    docker exec -it vault vault status
+
+# Login to Vault
+vault-login:
+    @echo "Enter root token:"
+    @docker exec -it vault vault login
+
+# Enable KV v2 secrets engine
+{% raw %}
+vault-enable-kv path="{% endraw %}{{ service_name }}{% raw %}":
+    docker exec vault vault secrets enable -path={{ path }} kv-v2
+    @echo "KV v2 enabled at {{ path }}/"
+
+# Setup AppRole for Vault Agent
+vault-setup-approle path="{% endraw %}{{ service_name }}{% raw %}":
+    docker exec vault vault auth enable approle 2>/dev/null || true
+    @echo 'path "{{ path }}/data/*" { capabilities = ["read", "list"] } path "{{ path }}/metadata/*" { capabilities = ["read", "list"] }' | docker exec -i vault vault policy write {{ path }}-policy -
+    docker exec vault vault write auth/approle/role/{{ path }}-agent token_policies="{{ path }}-policy" token_ttl=1h token_max_ttl=4h
+    @echo "AppRole created for {{ path }}. Now run: just vault-get-credentials {{ path }}"
+
+# Get AppRole credentials for Vault Agent
+vault-get-credentials path="{% endraw %}{{ service_name }}{% raw %}":
+    docker exec vault vault read -field=role_id auth/approle/role/{{ path }}-agent/role-id > deploy/ops/configs/vault/agent/role-id
+    docker exec vault vault write -field=secret_id -f auth/approle/role/{{ path }}-agent/secret-id > deploy/ops/configs/vault/agent/secret-id
+    @echo "Credentials saved to deploy/ops/configs/vault/agent/"
+
+# Check Vault Agent logs
+vault-agent-logs:
+    docker logs vault-agent
+
+# Check rendered secrets
+vault-agent-secrets:
+    docker exec vault-agent cat /vault/secrets/.env
+
+# List secrets in Vault
+vault-list path="{% endraw %}{{ service_name }}{% raw %}":
+    docker exec vault vault kv list {{ path }}/
+
+# Get secret from Vault
+vault-get env="local" path="{% endraw %}{{ service_name }}{% raw %}":
+    docker exec vault vault kv get {{ path }}/{{ env }}
+
+# Put secret in Vault (REPLACES all keys)
+vault-put env path +secrets:
+    docker exec vault vault kv put {{ path }}/{{ env }} {{ secrets }}
+
+# Patch secret in Vault (ADDS/UPDATES keys)
+vault-patch env path +secrets:
+    docker exec vault vault kv patch {{ path }}/{{ env }} {{ secrets }}
+{% endraw %}
+{% endif %}
+
+# =============================================================================
+# VPS DEPLOYMENT
+# =============================================================================
+{% raw %}
+# Deploy to VPS via SSH
+deploy env="dev" host="":
+    #!/usr/bin/env bash
+    if [ -z "{{ host }}" ]; then
+        echo "Usage: just deploy <env> <host>"
+        echo "Example: just deploy dev user@vps.example.com"
+        exit 1
+    fi
+    ssh {{ host }} 'cd /opt/{% endraw %}{{ project_name }}{% raw %}/repo && git pull origin master && \
+        cp deploy/docker-compose.*.yml /opt/{% endraw %}{{ project_name }}{% raw %}/ && \
+        cp -r deploy/ops /opt/{% endraw %}{{ project_name }}{% raw %}/ && \
+        cp -r deploy/app /opt/{% endraw %}{{ project_name }}{% raw %}/ && \
+        cd /opt/{% endraw %}{{ project_name }}{% raw %} && \
+        docker compose \
+            -f docker-compose.ops.yml \
+            -f ops/overlays/base/docker-compose.yml \
+            -f ops/overlays/{{ env }}/docker-compose.yml \
+            -f docker-compose.app.yml \
+            -f app/overlays/base/docker-compose.yml \
+            -f app/overlays/{{ env }}/docker-compose.yml \
+            --profile caddy{% endraw %}{% if promtail %} --profile promtail{% endif %}{% if watchtower %} --profile watchtower{% endif %}{% raw %} \
+            pull && \
+        docker compose \
+            -f docker-compose.ops.yml \
+            -f ops/overlays/base/docker-compose.yml \
+            -f ops/overlays/{{ env }}/docker-compose.yml \
+            -f docker-compose.app.yml \
+            -f app/overlays/base/docker-compose.yml \
+            -f app/overlays/{{ env }}/docker-compose.yml \
+            --profile caddy{% endraw %}{% if promtail %} --profile promtail{% endif %}{% if watchtower %} --profile watchtower{% endif %}{% raw %} \
+            up -d'
+{% endraw %}
+{% if watchtower %}
+
+# Trigger Watchtower update
+{% raw %}
+watchtower-trigger url token:
+    curl -X POST "{{ url }}:8090/v1/update" -H "Authorization: Bearer {{ token }}"
+{% endraw %}
+{% endif %}
+
+# =============================================================================
+# LINT & CHECKS
+# =============================================================================
+
+# Install pre-commit hooks
+lint-install:
+    brew install pre-commit
+    pre-commit install
+
+# Run all pre-commit checks
+lint:
+    #!/usr/bin/env bash
+    SKIP_HOOKS=""
+{% if use_terraform %}
+    if ! command -v terraform &> /dev/null; then
+        echo "terraform not found, skipping terraform hooks"
+        SKIP_HOOKS="terraform_fmt,terraform_validate"
+    fi
+{% endif %}
+    SKIP=$SKIP_HOOKS pre-commit run --all-files
+{% if use_terraform %}
+
+# Run terraform-specific linting
+lint-tf:
+    pre-commit run terraform_fmt --all-files
+    pre-commit run terraform_validate --all-files
+{% endif %}
+
+# Run secret scanning
+lint-secrets:
+    gitleaks detect --source . -v
+
+# =============================================================================
+# UTILITIES
+# =============================================================================
+
+# Create network (if not exists)
+network:
+    docker network create infra-network 2>/dev/null || true
+
+# Login to GitHub Container Registry
+login-registry:
+    @echo "Enter your GitHub Personal Access Token (PAT):"
+    @read -s PAT && echo "$$PAT" | docker login ghcr.io -u $$(git config user.name) --password-stdin
+
+# Clean up Docker resources
+clean:
+    docker system prune -f
+
+# Clean up everything including volumes
+clean-all:
+    docker system prune -af --volumes

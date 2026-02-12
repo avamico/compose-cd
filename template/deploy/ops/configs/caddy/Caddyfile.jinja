@@ -1,0 +1,27 @@
+# Caddyfile - Reverse Proxy Configuration
+
+# API Backend
+{$API_SUBDOMAIN}.{$DOMAIN} {
+    reverse_proxy {{ service_name }}:{{ app_port }}
+
+    handle {{ app_health_path }} {
+        reverse_proxy {{ service_name }}:{{ app_port }}
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}
+{% if grafana %}
+
+# Grafana Dashboard
+{$GRAFANA_SUBDOMAIN}.{$DOMAIN} {
+    reverse_proxy grafana:3000
+
+    log {
+        output stdout
+        format json
+    }
+}
+{% endif %}

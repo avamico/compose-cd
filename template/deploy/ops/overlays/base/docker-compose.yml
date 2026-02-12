@@ -1,0 +1,9 @@
+# =============================================================================
+# OPS OVERLAY - BASE
+# =============================================================================
+# Shared configuration for all environments.
+# NOTE: env_file must be in environment overlays (paths are relative to project dir)
+# =============================================================================
+
+# Base overlay is empty - env_file paths must be in environment-specific overlays
+# Keep this file for future shared settings that don't involve file paths

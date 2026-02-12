@@ -1,0 +1,75 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: {% raw %}${{ github.workflow }}-${{ github.ref }}{% endraw %}
+  cancel-in-progress: true
+
+jobs:
+  pre-commit:
+    name: Pre-commit Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run pre-commit
+        uses: pre-commit/action@v3.0.1
+{% if use_terraform %}
+        env:
+          SKIP: terraform_fmt,terraform_validate
+{% endif %}
+{% if use_terraform %}
+
+  terraform:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [{{ environments.split(',') | join(', ') }}]
+{% raw %}
+    defaults:
+      run:
+        working-directory: terraform/environments/${{ matrix.env }}
+{% endraw %}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive ../../
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        run: terraform validate
+{% endif %}
+
+  docker-compose:
+    name: Docker Compose Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose files
+        working-directory: deploy
+        run: |
+          docker compose -f docker-compose.ops.yml config --quiet
+          docker compose -f docker-compose.app.yml config --quiet

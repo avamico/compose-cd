@@ -1,0 +1,55 @@
+# =============================================================================
+# APPLICATION SERVICE - BASE
+# =============================================================================
+# Base application service. Use with environment overlay:
+#
+#   docker compose \
+#     -f docker-compose.ops.yml \
+#     -f ops/overlays/dev/docker-compose.yml \
+#     -f docker-compose.app.yml \
+#     -f app/overlays/dev/docker-compose.yml \
+#     --profile caddy up -d
+# =============================================================================
+
+services:
+  {{ service_name }}:
+    image: {{ docker_image }}:latest
+    container_name: {{ service_name }}
+    restart: unless-stopped
+    expose:
+      - "{{ app_port }}"
+{% if vault %}
+    volumes:
+      - vault_secrets:/vault/secrets:ro
+{% endif %}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{{ app_port }}{{ app_health_path }}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "{% raw %}{{.Name}}{% endraw %}"
+{% if traefik %}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`${API_SUBDOMAIN:-api}.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls=true"
+      - "traefik.http.services.api.loadbalancer.server.port={{ app_port }}"
+{% endif %}
+    networks:
+      - infra-network
+
+networks:
+  infra-network:
+    name: infra-network
+{% if vault %}
+
+volumes:
+  vault_secrets:
+{% endif %}

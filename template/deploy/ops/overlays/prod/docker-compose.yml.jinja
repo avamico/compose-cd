@@ -1,0 +1,58 @@
+# =============================================================================
+# OPS OVERLAY - PROD
+# =============================================================================
+# Prod-specific overrides for ops services.
+# =============================================================================
+
+services:
+{% if caddy %}
+  caddy:
+    env_file:
+      - ops/overlays/prod/.env
+{% endif %}
+{% if traefik %}
+
+  traefik:
+    env_file:
+      - ops/overlays/prod/.env
+{% endif %}
+{% if grafana %}
+
+  grafana:
+    env_file:
+      - ops/overlays/prod/.env
+{% endif %}
+{% if prometheus %}
+
+  prometheus:
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=90d"
+      - "--web.enable-lifecycle"
+{% endif %}
+{% if loki %}
+
+  loki:
+    volumes:
+      - ./ops/overlays/prod/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+{% endif %}
+{% if vault_agent %}
+
+  vault-agent:
+    environment:
+      - VAULT_SECRET_PATH={{ service_name }}
+      - VAULT_SECRET_ENV=prod
+{% endif %}
+{% if watchtower %}
+
+  watchtower:
+    env_file:
+      - ops/overlays/prod/.env
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=0
+      - REPO_USER=${REPO_USER:-}
+      - REPO_PASS=${REPO_PASS:-}
+    command: --scope prod
+{% endif %}

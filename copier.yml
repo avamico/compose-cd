@@ -1,0 +1,167 @@
+# =============================================================================
+# compose-cd - Copier Template Configuration
+# =============================================================================
+# Interactive scaffolding for Docker Compose deployment repos.
+# Usage: copier copy https://github.com/avamico/compose-cd my-project
+# =============================================================================
+
+_min_copier_version: "9.0.0"
+_subdirectory: template
+_templates_suffix: .jinja
+_answers_file: .copier-answers.yml
+
+_exclude:
+  - copier.yml
+  - "~*"
+  - "*.py[co]"
+  - __pycache__
+  - .git
+  - .DS_Store
+
+_skip_if_exists:
+  - "deploy/ops/overlays/*/.env"
+  - "deploy/app/overlays/*/.env"
+  - "terraform/environments/*/.env"
+
+# =============================================================================
+# PROJECT INFO
+# =============================================================================
+project_name:
+  type: str
+  help: "Project name (used for directories, DNS, vault paths)"
+  validator: "{% if not project_name %}Cannot be empty{% endif %}"
+
+service_name:
+  type: str
+  help: "Docker service name"
+  default: "{{ project_name }}-service"
+
+github_owner:
+  type: str
+  help: "GitHub org or username"
+  validator: "{% if not github_owner %}Cannot be empty{% endif %}"
+
+docker_image:
+  type: str
+  help: "Full Docker image path"
+  default: "ghcr.io/{{ github_owner }}/{{ service_name }}"
+
+app_port:
+  type: int
+  help: "Application port"
+  default: 3002
+
+app_health_path:
+  type: str
+  help: "Health check endpoint path"
+  default: "/health"
+
+app_command:
+  type: str
+  help: "Container startup command"
+  default: "/app/service app start"
+
+domain:
+  type: str
+  help: "Base domain (e.g. example.com)"
+  default: "example.com"
+
+# =============================================================================
+# ENVIRONMENTS
+# =============================================================================
+environments:
+  type: str
+  help: "Environments to include (comma-separated: local,dev,prod)"
+  default: "local,dev,prod"
+
+# =============================================================================
+# CI/CD
+# =============================================================================
+ci:
+  type: bool
+  help: "Include GitHub Actions CI/CD?"
+  default: true
+
+# =============================================================================
+# OPS SERVICES
+# =============================================================================
+prometheus:
+  type: bool
+  help: "Include Prometheus (metrics collection)?"
+  default: true
+
+grafana:
+  type: bool
+  help: "Include Grafana (dashboards)?"
+  default: true
+
+loki:
+  type: bool
+  help: "Include Loki (log aggregation)?"
+  default: true
+
+promtail:
+  type: bool
+  help: "Include Promtail (log shipping)?"
+  default: true
+
+tempo:
+  type: bool
+  help: "Include Tempo (distributed tracing)?"
+  default: false
+
+cadvisor:
+  type: bool
+  help: "Include cAdvisor (container metrics)?"
+  default: true
+
+vault:
+  type: bool
+  help: "Include Vault (secrets management)?"
+  default: true
+
+vault_agent:
+  type: bool
+  help: "Include Vault Agent (auto-sync secrets)?"
+  default: true
+
+caddy:
+  type: bool
+  help: "Include Caddy (reverse proxy)?"
+  default: true
+
+traefik:
+  type: bool
+  help: "Include Traefik (alternative reverse proxy)?"
+  default: false
+
+watchtower:
+  type: bool
+  help: "Include Watchtower (auto-deploy on image push)?"
+  default: true
+
+# =============================================================================
+# TERRAFORM
+# =============================================================================
+use_terraform:
+  type: bool
+  help: "Include Terraform infrastructure-as-code?"
+  default: false
+
+hetzner:
+  type: bool
+  help: "Include Hetzner Cloud module?"
+  default: false
+  when: "{{ use_terraform }}"
+
+cloudflare:
+  type: bool
+  help: "Include Cloudflare module (DNS, Pages)?"
+  default: false
+  when: "{{ use_terraform }}"
+
+supabase:
+  type: bool
+  help: "Include Supabase module (auth, database)?"
+  default: false
+  when: "{{ use_terraform }}"
