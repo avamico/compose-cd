@@ -1,0 +1,55 @@
+# [[ .project_name ]] Deployments
+
+Full documentation: [README.md](./README.md)
+
+## Quick Reference
+
+```bash
+# Local development
+just up                     # Start ops + app
+just up-all                 # Start all (+ caddy, promtail, watchtower, vault-agent)
+just down                   # Stop all
+just logs                   # View logs
+just ps                     # Show containers
+[[ if .use_terraform ]]
+
+# Terraform
+just tf-init dev
+just tf-plan dev
+just tf-apply dev
+[[ end ]]
+[[ if .vault ]]
+
+# Vault
+just vault-init             # First time setup
+just vault-unseal           # Run 3x with different keys
+just vault-put local [[ .service_name ]] KEY=value
+[[ end ]]
+
+# Linting
+just lint                   # Run all checks
+```
+
+## Structure
+
+| Directory    | Purpose                          |
+| ------------ | -------------------------------- |
+[[ if .use_terraform ]]
+| `/terraform` | Infrastructure (run once)        |
+[[ end ]]
+| `/deploy`    | Docker Compose services (on VPS) |
+
+## Key URLs (Local)
+
+| Service    | URL                   |
+| ---------- | --------------------- |
+[[ if .grafana ]]
+| Grafana    | http://localhost:3001 |
+[[ end ]]
+[[ if .prometheus ]]
+| Prometheus | http://localhost:9090 |
+[[ end ]]
+[[ if .vault ]]
+| Vault      | http://localhost:8200 |
+[[ end ]]
+| App        | http://localhost:[[ .app_port ]] |

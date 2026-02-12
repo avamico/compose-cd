@@ -1,0 +1,55 @@
+# =============================================================================
+# LOCAL DEVELOPMENT OVERRIDES
+# =============================================================================
+# Exposes services on localhost ports and disables VPS-only services.
+#
+# Usage:
+#   docker compose \
+#     -f docker-compose.ops.yml \
+#     -f ops/overlays/local/docker-compose.yml \
+#     -f docker-compose.local.yml \
+#     up -d
+# =============================================================================
+
+services:
+  [[ .service_name ]]:
+    ports:
+      - "[[ .app_port ]]:[[ .app_port ]]"
+[[ if .grafana ]]
+
+  grafana:
+    ports:
+      - "3001:3000"
+[[ end ]]
+[[ if .prometheus ]]
+
+  prometheus:
+    ports:
+      - "9090:9090"
+[[ end ]]
+[[ if .loki ]]
+
+  loki:
+    ports:
+      - "3100:3100"
+[[ end ]]
+[[ if .vault ]]
+
+  vault:
+    ports:
+      - "8200:8200"
+[[ end ]]
+[[ if .promtail ]]
+
+  # Disable promtail locally
+  promtail:
+    profiles:
+      - disabled
+[[ end ]]
+[[ if .watchtower ]]
+
+  # Disable watchtower locally
+  watchtower:
+    profiles:
+      - disabled
+[[ end ]]

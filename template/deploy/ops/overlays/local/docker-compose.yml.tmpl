@@ -1,0 +1,44 @@
+# =============================================================================
+# OPS OVERLAY - LOCAL
+# =============================================================================
+# Local-specific overrides for ops services.
+# =============================================================================
+
+[[ if or .caddy .traefik .grafana .vault_agent .watchtower .prometheus .loki ]]
+services:
+[[ if .caddy ]]
+  caddy:
+    env_file:
+      - ops/overlays/local/.env
+[[ end ]]
+[[ if .traefik ]]
+
+  traefik:
+    env_file:
+      - ops/overlays/local/.env
+[[ end ]]
+[[ if .grafana ]]
+
+  grafana:
+    env_file:
+      - ops/overlays/local/.env
+[[ end ]]
+[[ if .vault_agent ]]
+
+  vault-agent:
+    environment:
+      - VAULT_SECRET_PATH=[[ .service_name ]]
+      - VAULT_SECRET_ENV=local
+[[ end ]]
+[[ if .watchtower ]]
+
+  watchtower:
+    env_file:
+      - ops/overlays/local/.env
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=0
+      - REPO_USER=${REPO_USER:-}
+      - REPO_PASS=${REPO_PASS:-}
+    command: --scope local
+[[ end ]]
+[[ end ]]

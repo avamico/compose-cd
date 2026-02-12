@@ -1,0 +1,24 @@
+# =============================================================================
+# APP OVERLAY - LOCAL
+# =============================================================================
+# Local-specific overrides for application service.
+# =============================================================================
+
+services:
+  [[ .service_name ]]:
+    image: [[ .docker_image ]]:latest
+    platform: linux/amd64
+    env_file:
+      - app/overlays/local/.env
+[[ if .vault ]]
+    volumes:
+      - ./ops/configs/vault/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/entrypoint.sh"]
+[[ end ]]
+    command: ["[[ .app_command | splitWords | joinQuoted ]]"]
+    ports:
+      - "[[ .app_port ]]:[[ .app_port ]]"
+[[ if .watchtower ]]
+    labels:
+      - "com.centurylinklabs.watchtower.scope=local"
+[[ end ]]

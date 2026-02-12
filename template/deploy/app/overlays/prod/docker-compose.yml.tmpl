@@ -1,0 +1,25 @@
+# =============================================================================
+# APP OVERLAY - PROD
+# =============================================================================
+# Prod-specific overrides for application service.
+# =============================================================================
+
+services:
+  [[ .service_name ]]:
+    image: [[ .docker_image ]]:latest
+    env_file:
+      - app/overlays/prod/.env
+[[ if .vault ]]
+    volumes:
+      - ./ops/configs/vault/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/entrypoint.sh"]
+[[ end ]]
+    command: ["[[ .app_command | splitWords | joinQuoted ]]"]
+[[ if .vault_agent ]]
+    depends_on:
+      - vault-agent
+[[ end ]]
+[[ if .watchtower ]]
+    labels:
+      - "com.centurylinklabs.watchtower.scope=prod"
+[[ end ]]

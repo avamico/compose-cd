@@ -1,0 +1,44 @@
+# =============================================================================
+# OPS OVERLAY - DEV
+# =============================================================================
+# Dev-specific overrides for ops services.
+# =============================================================================
+
+[[ if or .caddy .traefik .grafana .vault_agent .watchtower .prometheus .loki ]]
+services:
+[[ if .caddy ]]
+  caddy:
+    env_file:
+      - ops/overlays/dev/.env
+[[ end ]]
+[[ if .traefik ]]
+
+  traefik:
+    env_file:
+      - ops/overlays/dev/.env
+[[ end ]]
+[[ if .grafana ]]
+
+  grafana:
+    env_file:
+      - ops/overlays/dev/.env
+[[ end ]]
+[[ if .vault_agent ]]
+
+  vault-agent:
+    environment:
+      - VAULT_SECRET_PATH=[[ .service_name ]]
+      - VAULT_SECRET_ENV=dev
+[[ end ]]
+[[ if .watchtower ]]
+
+  watchtower:
+    env_file:
+      - ops/overlays/dev/.env
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=60
+      - REPO_USER=${REPO_USER:-}
+      - REPO_PASS=${REPO_PASS:-}
+    command: --scope dev
+[[ end ]]
+[[ end ]]

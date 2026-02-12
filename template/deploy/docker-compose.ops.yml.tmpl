@@ -1,0 +1,295 @@
+# =============================================================================
+# OPS SERVICES - BASE
+# =============================================================================
+# Base operational services (monitoring, secrets, CD). Use with environment overlay:
+#
+#   docker compose \
+#     -f docker-compose.ops.yml \
+#     -f ops/overlays/dev/docker-compose.yml \
+#     --profile caddy up -d
+# =============================================================================
+[[ if or .caddy .traefik .prometheus .cadvisor .tempo .loki .promtail .grafana .vault .vault_agent .watchtower ]]
+
+services:
+[[ if .caddy ]]
+  # ===========================================================================
+  # REVERSE PROXY - CADDY
+  # ===========================================================================
+  caddy:
+    image: caddy:2.8.4
+    container_name: caddy
+    restart: unless-stopped
+    profiles:
+      - caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./ops/configs/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - infra-network
+[[ end ]]
+[[ if .traefik ]]
+
+  # ===========================================================================
+  # REVERSE PROXY - TRAEFIK
+  # ===========================================================================
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    profiles:
+      - traefik
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./ops/configs/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./ops/configs/traefik/dynamic:/etc/traefik/dynamic:ro
+      - traefik_certs:/letsencrypt
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.traefik.service=api@internal"
+    networks:
+      - infra-network
+[[ end ]]
+[[ if .prometheus ]]
+
+  # ===========================================================================
+  # MONITORING - METRICS
+  # ===========================================================================
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    restart: unless-stopped
+    expose:
+      - "9090"
+    volumes:
+      - ./ops/configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    networks:
+      - infra-network
+[[ end ]]
+[[ if .cadvisor ]]
+
+  # Container metrics exporter
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    expose:
+      - "8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=10s
+      - --max_housekeeping_interval=15s
+      - --store_container_labels=true
+    networks:
+      - infra-network
+[[ end ]]
+[[ if .tempo ]]
+
+  # ===========================================================================
+  # MONITORING - TRACES
+  # ===========================================================================
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: tempo
+    restart: unless-stopped
+    expose:
+      - "3200" # Tempo API
+      - "4317" # OTLP gRPC
+      - "4318" # OTLP HTTP
+    volumes:
+      - ./ops/configs/tempo/tempo-config.yml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    command: -config.file=/etc/tempo/tempo.yaml
+    networks:
+      - infra-network
+[[ end ]]
+[[ if .loki ]]
+
+  # ===========================================================================
+  # MONITORING - LOGS
+  # ===========================================================================
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: loki
+    restart: unless-stopped
+    expose:
+      - "3100"
+    volumes:
+      - ./ops/configs/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - infra-network
+[[ end ]]
+[[ if .promtail ]]
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    container_name: promtail
+    restart: unless-stopped
+    profiles:
+      - promtail
+    volumes:
+      - ./ops/configs/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - infra-network
+[[ end ]]
+[[ if .grafana ]]
+
+  # ===========================================================================
+  # MONITORING - VISUALIZATION
+  # ===========================================================================
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: grafana
+    restart: unless-stopped
+    expose:
+      - "3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./ops/configs/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+[[ if .prometheus ]]
+      - prometheus
+[[ end ]]
+[[ if .loki ]]
+      - loki
+[[ end ]]
+[[ if .traefik ]]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`${GRAFANA_SUBDOMAIN:-grafana}.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls=true"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+[[ end ]]
+    networks:
+      - infra-network
+[[ end ]]
+[[ if .vault ]]
+
+  # ===========================================================================
+  # SECRETS MANAGEMENT
+  # ===========================================================================
+  vault:
+    image: hashicorp/vault:1.18.3
+    container_name: vault
+    restart: unless-stopped
+    entrypoint: vault
+    expose:
+      - "8200"
+    environment:
+      - VAULT_ADDR=http://127.0.0.1:8200
+      - VAULT_API_ADDR=http://127.0.0.1:8200
+    volumes:
+      - ./ops/configs/vault/config:/vault/config
+      - vault_data:/vault/file
+    cap_add:
+      - IPC_LOCK
+    command: server -config=/vault/config/vault.hcl
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - infra-network
+[[ end ]]
+[[ if .vault_agent ]]
+
+  vault-agent:
+    image: hashicorp/vault:1.18.3
+    container_name: vault-agent
+    restart: unless-stopped
+    profiles:
+      - vault-agent
+    entrypoint: vault
+    command: agent -config=/vault/agent/agent-config.hcl
+    environment:
+      - VAULT_ADDR=http://vault:8200
+    volumes:
+      - ./ops/configs/vault/agent:/vault/agent:ro
+      - vault_secrets:/vault/secrets
+    depends_on:
+      - vault
+    networks:
+      - infra-network
+[[ end ]]
+[[ if .watchtower ]]
+
+  # ===========================================================================
+  # CONTINUOUS DEPLOYMENT
+  # ===========================================================================
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    container_name: watchtower
+    restart: unless-stopped
+    profiles:
+      - watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_HTTP_API_UPDATE=true
+      - WATCHTOWER_HTTP_API_PERIODIC_POLLS=true
+    ports:
+      - "127.0.0.1:8090:8080"
+    networks:
+      - infra-network
+[[ end ]]
+[[ end ]]
+
+networks:
+  infra-network:
+    name: infra-network
+[[ if or .caddy .traefik .prometheus .tempo .loki .grafana .vault ]]
+
+volumes:
+[[ if .caddy ]]
+  caddy_data:
+  caddy_config:
+[[ end ]]
+[[ if .traefik ]]
+  traefik_certs:
+[[ end ]]
+[[ if .prometheus ]]
+  prometheus_data:
+[[ end ]]
+[[ if .tempo ]]
+  tempo_data:
+[[ end ]]
+[[ if .loki ]]
+  loki_data:
+[[ end ]]
+[[ if .grafana ]]
+  grafana_data:
+[[ end ]]
+[[ if .vault ]]
+  vault_data:
+  vault_secrets:
+[[ end ]]
+[[ end ]]

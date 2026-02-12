@@ -1,0 +1,48 @@
+[[ if .use_terraform ]]
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+terraform/environments/*/.env
+!terraform/environments/*/.env.example
+[[ end ]]
+
+# Environment files
+.env.local
+.env.*.local
+[[ if .vault ]]
+
+# Vault credentials (never commit)
+deploy/ops/configs/vault/agent/role-id
+deploy/ops/configs/vault/agent/secret-id
+deploy/ops/configs/vault/agent/.token
+[[ end ]]
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# SSH keys
+*.pem
+*.key
+id_rsa*
+
+# Copier
+.copier-answers.yml

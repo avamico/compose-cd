@@ -1,0 +1,126 @@
+# [[ .project_name ]] Deployments
+
+Deployment infrastructure for [[ .project_name ]].
+
+## Quick Start
+
+```bash
+# Install just (command runner)
+brew install just
+
+# Start locally
+just up
+
+# Start all services
+just up-all
+
+# View logs
+just logs
+
+# Stop
+just down
+```
+
+## Structure
+
+```
+[[ .project_name ]]-deployments/
+[[ if .use_terraform ]]
+├── terraform/          # Infrastructure as Code
+[[ end ]]
+├── deploy/
+│   ├── docker-compose.ops.yml    # Ops services
+│   ├── docker-compose.app.yml    # Application
+│   ├── docker-compose.local.yml  # Local overrides
+│   ├── ops/configs/              # Service configs
+│   └── ops/overlays/             # Environment-specific
+├── scripts/            # Setup scripts
+└── justfile            # Commands
+```
+
+## Environments
+
+| Environment | Usage |
+|-------------|-------|
+[[ if containsStr .environments "local" ]]
+| local | Development on your machine |
+[[ end ]]
+[[ if containsStr .environments "dev" ]]
+| dev | Development server |
+[[ end ]]
+[[ if containsStr .environments "prod" ]]
+| prod | Production server |
+[[ end ]]
+
+## Services
+
+| Service | URL (Local) |
+|---------|-------------|
+| App | http://localhost:[[ .app_port ]] |
+[[ if .grafana ]]
+| Grafana | http://localhost:3001 |
+[[ end ]]
+[[ if .prometheus ]]
+| Prometheus | http://localhost:9090 |
+[[ end ]]
+[[ if .vault ]]
+| Vault | http://localhost:8200 |
+[[ end ]]
+
+## Docker Compose Overlay Pattern
+
+Services use a layered configuration:
+```bash
+docker compose \
+  -f docker-compose.ops.yml \           # Base ops services
+  -f ops/overlays/base/docker-compose.yml \   # Shared config
+  -f ops/overlays/dev/docker-compose.yml \    # Environment-specific
+  -f docker-compose.app.yml \           # App service
+  -f app/overlays/base/docker-compose.yml \   # Shared app config
+  -f app/overlays/dev/docker-compose.yml      # App env-specific
+```
+[[ if .vault ]]
+
+## Vault Setup
+
+```bash
+# First time
+just vault-init
+just vault-unseal  # Run 3x with different keys
+just vault-login
+
+# Enable secrets engine
+just vault-enable-kv [[ .service_name ]]
+
+# Setup AppRole for Vault Agent
+just vault-setup-approle [[ .service_name ]]
+just vault-get-credentials [[ .service_name ]]
+
+# Store secrets
+just vault-put dev [[ .service_name ]] DATABASE_URL="postgresql://..." API_KEY="..."
+```
+[[ end ]]
+
+## VPS Deployment
+
+```bash
+# Deploy via SSH
+just deploy dev user@your-vps.com
+
+# Or use the setup script for first-time VPS setup
+./scripts/setup-vps.sh dev
+```
+[[ if .use_terraform ]]
+
+## Terraform
+
+```bash
+just tf-init dev
+just tf-plan dev
+just tf-apply dev
+```
+[[ end ]]
+
+---
+
+Generated with [compose-cd](https://github.com/avamico/compose-cd).

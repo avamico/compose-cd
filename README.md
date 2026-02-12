@@ -1,143 +1,110 @@
 # compose-cd
 
-ArgoCD-like GitOps deployment platform for Docker Compose on VPS.
+ArgoCD-like GitOps deployment scaffolding for Docker Compose on VPS.
 
-## What is this?
+**compose-cd** generates customized deployment repositories with Docker Compose services, monitoring, secrets management, CI/CD, and infrastructure-as-code — all from an interactive CLI.
 
-An interactive scaffolding tool that generates production-ready deployment repos for Docker Compose. Like `create-react-app` but for your infrastructure.
+## Install
 
-You answer a few questions and get a customized repo with:
-- **Docker Compose** overlay pattern (base → environment-specific configs)
-- **Observability** (Prometheus, Grafana, Loki, Tempo, cAdvisor, Promtail)
-- **Secrets management** (HashiCorp Vault + Vault Agent)
-- **Reverse proxy** (Caddy or Traefik)
-- **Continuous deployment** (Watchtower)
-- **Infrastructure as Code** (Terraform: Hetzner, Cloudflare, Supabase)
-- **CI/CD** (GitHub Actions, pre-commit hooks, Gitleaks)
-- **Command runner** (Justfile)
+```bash
+# From source
+go install github.com/avamico/compose-cd@latest
 
-Only the services you select are included. No bloat.
+# Or download a binary from releases
+# https://github.com/avamico/compose-cd/releases
+```
 
 ## Quick Start
 
-### Prerequisites
-
-- [Python 3.8+](https://www.python.org/)
-- [Copier](https://copier.readthedocs.io/): `pip install copier`
-
-### Generate a project
-
 ```bash
-copier copy https://github.com/avamico/compose-cd my-app-deployments
+# Interactive mode
+compose-cd init my-project
+
+# Non-interactive with defaults
+compose-cd init --defaults -p my-app -o my-org my-project
 ```
 
-You'll be asked:
-- Project name, service name, GitHub owner
-- Docker image, app port, health check path
-- Which environments (local, dev, prod)
-- Which services to include (Grafana, Vault, Caddy, etc.)
-- Whether to include Terraform
+The interactive wizard guides you through:
 
-### Use your generated project
+1. **Project info** — name, service name, GitHub owner, Docker image
+2. **App config** — port, health path, command, domain, environments
+3. **CI/CD** — GitHub Actions workflows
+4. **Observability** — Prometheus, Grafana, Loki, Promtail, Tempo, cAdvisor
+5. **Infrastructure** — Vault, Caddy/Traefik, Watchtower
+6. **Terraform** — Hetzner, Cloudflare, Supabase modules
 
-```bash
-cd my-app-deployments
+## What You Get
 
-# Start locally
-just up
-
-# Start everything (reverse proxy, log shipping, etc.)
-just up-all
-
-# Deploy to VPS
-just deploy dev user@your-vps.com
-```
-
-### Update when template evolves
-
-```bash
-cd my-app-deployments
-copier update
-```
-
-Copier will merge template updates while preserving your customizations.
-
-## What gets generated
+A deployment repository structured like this:
 
 ```
-my-app-deployments/
+my-project/
 ├── deploy/
-│   ├── docker-compose.ops.yml      # Ops services (monitoring, vault, etc.)
-│   ├── docker-compose.app.yml      # Your application service
-│   ├── docker-compose.local.yml    # Local dev port overrides
+│   ├── docker-compose.ops.yml      # Monitoring, secrets, proxy
+│   ├── docker-compose.app.yml      # Your application
+│   ├── docker-compose.local.yml    # Local dev overrides
 │   ├── ops/
-│   │   ├── configs/                # Service configurations
-│   │   │   ├── caddy/              # Reverse proxy
-│   │   │   ├── prometheus/         # Metrics collection
-│   │   │   ├── grafana/            # Dashboards + datasources
-│   │   │   ├── loki/               # Log aggregation
-│   │   │   ├── tempo/              # Distributed tracing
-│   │   │   ├── promtail/           # Log shipping
-│   │   │   ├── vault/              # Secrets management
-│   │   │   └── traefik/            # Alternative reverse proxy
-│   │   └── overlays/               # Environment-specific configs
-│   │       ├── base/
-│   │       ├── local/
-│   │       ├── dev/
-│   │       └── prod/
+│   │   ├── configs/                # Service configs (Caddy, Prometheus, etc.)
+│   │   └── overlays/               # Environment-specific overrides
 │   └── app/
-│       └── overlays/               # App environment configs
-├── terraform/                       # Infrastructure as Code (optional)
-├── scripts/                         # Setup scripts
-├── justfile                         # Command shortcuts
-└── .github/workflows/               # CI/CD
+│       └── overlays/               # App env overrides (local, dev, prod)
+├── terraform/                      # Optional IaC (Hetzner, Cloudflare, Supabase)
+├── scripts/                        # VPS setup, Vault initialization
+├── justfile                        # Command runner
+├── .github/workflows/              # CI/CD pipelines
+└── README.md
 ```
+
+### Available Services
+
+| Category | Service | Default | Description |
+|----------|---------|---------|-------------|
+| **Proxy** | Caddy | on | Reverse proxy with auto-HTTPS |
+| | Traefik | off | Alternative reverse proxy |
+| **Monitoring** | Prometheus | on | Metrics collection |
+| | Grafana | on | Dashboards |
+| | cAdvisor | on | Container metrics |
+| **Logging** | Loki | on | Log aggregation |
+| | Promtail | on | Log shipping |
+| **Tracing** | Tempo | off | Distributed tracing |
+| **Secrets** | Vault | on | Secrets management |
+| | Vault Agent | on | Auto-sync secrets to containers |
+| **Deploy** | Watchtower | on | Auto-deploy on image push |
 
 ## Architecture
 
 ```
-┌─────────────────┐         ┌─────────────────────────────────────┐
-│  Cloudflare DNS │         │           Hetzner VPS               │
-│   (SSL Proxy)   │────────▶│                                     │
-└─────────────────┘         │  ┌─────────────┐  ┌─────────────┐  │
-                            │  │ Caddy/Traefik│  │   Grafana   │  │
-                            │  └──────┬───────┘  └─────────────┘  │
-                            │         │                           │
-                            │    ┌────┴────┐    Observability:    │
-                            │    │ Your App│    Prometheus, Loki  │
-                            │    └─────────┘    Tempo, cAdvisor   │
-                            │                                     │
-                            │    Secrets: Vault + Vault Agent     │
-                            │    Deploy: Watchtower (auto-update) │
-                            └─────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│  Docker Compose Overlay Pattern      │
+│                                      │
+│  base → environment (local/dev/prod) │
+│                                      │
+│  Similar to Kustomize, but for       │
+│  Docker Compose                      │
+└──────────────────────────────────────┘
 ```
 
-## Service Options
+Each service is:
+- Defined in base compose files
+- Configured per-environment via overlays
+- Toggled on/off via Docker Compose profiles
+- Managed through a justfile command runner
 
-| Service | Default | Purpose |
-|---------|---------|---------|
-| Prometheus | ✅ | Metrics collection |
-| Grafana | ✅ | Dashboards (3 pre-built) |
-| Loki | ✅ | Log aggregation |
-| Promtail | ✅ | Log shipping |
-| Tempo | ❌ | Distributed tracing |
-| cAdvisor | ✅ | Container metrics |
-| Vault | ✅ | Secrets management |
-| Vault Agent | ✅ | Auto-sync secrets |
-| Caddy | ✅ | Reverse proxy (auto-SSL) |
-| Traefik | ❌ | Alternative reverse proxy |
-| Watchtower | ✅ | Auto-deploy on image push |
+## Development
+
+```bash
+make build      # Build binary
+make test       # Run tests
+make test-full  # Generate + validate full project
+make lint       # Run linter
+```
 
 ## Roadmap
 
-- [ ] **Part 2: Sync Agent** — Go daemon for GitOps reconciliation
-  - Watch Git repo for changes
-  - Diff desired vs running state
-  - Web dashboard showing sync status
-  - Webhook receiver for instant deploys
-- [ ] Multi-app support (multiple services in one repo)
-- [ ] Alerting rules templates
-- [ ] Zero-downtime deployment via docker-rollout
+- [ ] `compose-cd sync` — GitOps reconciliation agent (watch repo, auto-deploy)
+- [ ] `compose-cd update` — Re-scaffold with new template version
+- [ ] Web dashboard for deployment status
+- [ ] Homebrew tap
 
 ## License
 
