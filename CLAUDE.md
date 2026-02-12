@@ -95,9 +95,4 @@ Derived: `service_name` defaults to `{project_name}-service`, `docker_image` def
 
 ## Roadmap
 
-- [ ] `compose-cd sync` — Go daemon for GitOps reconciliation (watch repo, auto-deploy changes)
-- [ ] `compose-cd update` — Re-scaffold existing project with newer template version
-- [ ] Web dashboard for deployment status
-- [ ] Homebrew tap for macOS install
-- [ ] Unit tests for config, funcmap, exclusion
-- [ ] Golden file integration tests
+See [docs/todos.md](docs/todos.md) for the full task list.
